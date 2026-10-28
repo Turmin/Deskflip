@@ -21,6 +21,8 @@ A preset does two things per display:
 
 The order is always: reconnect displays the Mac needs → switch inputs → wait until the displays the Mac keeps are back → disconnect displays that are off or handed over.
 
+As a safety measure, Deskflip never disconnects the last active display.
+
 ## Requirements
 
 - Apple Silicon Mac, macOS 13 (Ventura) or later
@@ -72,12 +74,15 @@ deskflip init
 - **iPhone:** use *Run Script Over SSH* in Shortcuts to call `deskflip <preset>` on the Mac.
 - **Stream Deck (Mobile):** trigger the Shortcuts above.
 
+## Tested with
+
+Mac mini (Apple Silicon) with 3× iiyama ProLite XUB2792QSN (two via USB-C, one via HDMI) and a laptop on DisplayPort. Switching back from DisplayPort works over DDC on these monitors, even though reading the current input does not.
+
 ## Limitations
 
 - `deskflip-display` uses the private API `CGSConfigureDisplayEnabled`. Apple can change or remove it in any macOS update.
-- Disconnecting lasts for the current session. Logging out or restarting reconnects every display.
+- Disconnecting lasts for the current session. Logging out or restarting reconnects every display, so you can never get stuck without a screen.
 - Some monitors stop listening to DDC while they're set to another input. Switching back to the Mac then won't work from software; press the monitor's input button once instead.
-- Deskflip refuses to disconnect the last active display.
 
 If the private API stops working, [BetterDisplay Pro](https://betterdisplay.pro) offers the same disconnect feature, maintained across macOS updates.
 

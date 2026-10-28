@@ -1,8 +1,8 @@
-# deskflip
+# Deskflip
 
 Switch monitor inputs and connect/disconnect displays on macOS with one command.
 
-deskflip is for desks where monitors are shared between a Mac and another computer (a work laptop, a PC). Instead of pressing the input button on every monitor, you run a preset:
+Deskflip is for desks where monitors are shared between a Mac and another computer (a work laptop, a PC). Instead of pressing the input button on every monitor, you run a preset:
 
 ```sh
 deskflip work   # left + bottom go to the laptop, top stays on the Mac
@@ -76,6 +76,10 @@ deskflip init
 - `deskflip-display` uses the private API `CGSConfigureDisplayEnabled`. Apple can change or remove it in any macOS update.
 - Disconnecting lasts for the current session. Logging out or restarting reconnects every display.
 - Some monitors stop listening to DDC while they're set to another input. Switching back to the Mac then won't work from software; press the monitor's input button once instead.
-- deskflip refuses to disconnect the last active display.
+- Deskflip refuses to disconnect the last active display.
 
 If the private API stops working, [BetterDisplay Pro](https://betterdisplay.pro) offers the same disconnect feature, maintained across macOS updates.
+
+## License
+
+[MIT](LICENSE)

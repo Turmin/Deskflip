@@ -6,8 +6,8 @@ Deskflip is for desks where monitors are shared between a Mac and another comput
 
 ```sh
 deskflip work   # left + bottom go to the laptop, top stays on the Mac
-deskflip mac2   # left + bottom back to the Mac, top off
-deskflip mac3   # all three on the Mac
+deskflip mac    # left + bottom back to the Mac, top off
+deskflip all    # all three on the Mac
 ```
 
 Everything runs on the Mac. Nothing needs to be installed on the other computer.
@@ -19,7 +19,7 @@ A preset does two things per display:
 1. **Switches the monitor's input** over DDC/CI with [m1ddc](https://github.com/waydabber/m1ddc).
 2. **Connects or disconnects the display in macOS** with `deskflip-display`, a small Swift tool included in this repo. A display handed to another computer is disconnected, so macOS stops extending your desktop onto a screen you can't see.
 
-The order is always: reconnect displays the Mac needs → switch inputs → disconnect displays that are off or handed over.
+The order is always: reconnect displays the Mac needs → switch inputs → wait until the displays the Mac keeps are back → disconnect displays that are off or handed over.
 
 ## Requirements
 
@@ -42,7 +42,7 @@ deskflip init
 ## Setup
 
 1. Run `deskflip ids` and copy the UUID of each display into `~/.config/deskflip/config`. Identical monitors have identical names, so use the POSITION column to tell them apart.
-2. Set each monitor to the input you want by hand and run `deskflip input` to read its input code. The code for USB-C in particular differs per brand.
+2. Set each monitor to the input you want by hand and run `deskflip input` to read its input code. The code for USB-C in particular differs per brand (iiyama uses 19). Most monitors don't answer while they're set to an input the Mac isn't on; `deskflip input` then shows "no reply".
 3. Define your presets. See [`config.example`](config.example) for the format.
 4. Test disconnecting a single display first:
 
@@ -64,6 +64,7 @@ deskflip init
 | `deskflip init` | Create a config from the example |
 | `deskflip-display list` | List displays with their state and position |
 | `deskflip-display on\|off <UUID\|ID>` | Connect or disconnect one display |
+| `deskflip-display state <UUID\|ID>` | Print `on`/`off` (exit code 0 when connected) |
 
 ## One-button switching
 

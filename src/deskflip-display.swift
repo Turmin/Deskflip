@@ -5,6 +5,7 @@
 // Usage:  deskflip-display list
 //         deskflip-display off <UUID|ID>
 //         deskflip-display on  <UUID|ID>
+//         deskflip-display state <UUID|ID>   (exit 0 = connected)
 //
 // A unique UUID prefix of a few characters is enough (e.g. "3A7F").
 //
@@ -122,7 +123,7 @@ func setEnabled(_ id: CGDirectDisplayID, _ enabled: Bool) {
     print("Display \(id) \(enabled ? "connected" : "disconnected").")
 }
 
-let usage = "Usage: deskflip-display list | on <UUID|ID> | off <UUID|ID>"
+let usage = "Usage: deskflip-display list | on <UUID|ID> | off <UUID|ID> | state <UUID|ID>"
 let args = CommandLine.arguments
 guard args.count >= 2 else { fail(usage) }
 
@@ -145,6 +146,13 @@ case "on", "off":
     guard args.count >= 3 else { fail("specify a display UUID or ID.\n" + usage) }
     refreshCache()
     setEnabled(resolve(args[2]), args[1] == "on")
+case "state":
+    // Prints "on" or "off"; exit code 0 when connected, 1 when not.
+    guard args.count >= 3 else { fail("specify a display UUID or ID.\n" + usage) }
+    let id = resolve(args[2])
+    let active = onlineDisplays().contains(id) && isActive(id)
+    print(active ? "on" : "off")
+    exit(active ? 0 : 1)
 case "-h", "--help", "help":
     print(usage)
 default:

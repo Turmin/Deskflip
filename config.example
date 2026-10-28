@@ -21,7 +21,9 @@ DDC_IDS=(
 # DDC input codes (VCP 0x60). Common values: 15 = DisplayPort 1,
 # 16 = DisplayPort 2, 17 = HDMI 1, 18 = HDMI 2, 27 = USB-C.
 # These differ per monitor brand: check with `deskflip input` while each
-# monitor is set to the input you want.
+# monitor is set to the input you want. Example: iiyama ProLite XUB2792QSN
+# uses 19 for USB-C. Most monitors don't answer while set to another input,
+# so read the code for DisplayPort/HDMI while the Mac is on that input.
 INPUTS=(
   mac       27   # Mac via USB-C
   mac-hdmi  17   # Mac via HDMI
@@ -37,10 +39,11 @@ MAC_INPUTS=(mac mac-hdmi)
 # display from the Mac without switching its input.
 PRESETS=(
   work  "left:laptop bottom:laptop top:mac"
-  mac2  "left:mac bottom:mac top:off"
-  mac3  "left:mac bottom:mac top:mac"
+  mac   "left:mac bottom:mac top:off"
+  all   "left:mac bottom:mac top:mac"
 )
 
 # --- Timing (seconds) -------------------------------------------------------
 CONNECT_DELAY=2   # wait after reconnecting displays, before DDC commands
 SWITCH_DELAY=1    # wait after switching inputs, before disconnecting
+SETTLE_TIMEOUT=10 # max wait for kept displays to come back before disconnecting others

@@ -39,7 +39,7 @@ find_ddc_tool() {
 
 typeset -gA DISPLAYS DDC_IDS INPUTS PRESETS
 typeset -ga MAC_INPUTS
-typeset -g CONNECT_DELAY=2 SWITCH_DELAY=1
+typeset -g CONNECT_DELAY=2 SWITCH_DELAY=1 SETTLE_TIMEOUT=10
 
 load_config() {
   [[ -r $CONFIG ]] || die "no config at $CONFIG. Run 'deskflip init' first."
@@ -56,6 +56,19 @@ is_mac_input() { (( ${MAC_INPUTS[(Ie)$1]} )) }
 
 connect()    { "$DISPLAY_TOOL" on  "${DISPLAYS[$1]}" >/dev/null }
 disconnect() { "$DISPLAY_TOOL" off "${DISPLAYS[$1]}" >/dev/null }
+is_active()  { "$DISPLAY_TOOL" state "${DISPLAYS[$1]}" >/dev/null 2>&1 }
+
+# Wait until every given display is active in macOS. Switching a monitor's
+# input makes it re-link, so it can briefly drop out right after a switch.
+wait_active() {
+  local -a pending=($@)
+  local d tries=$(( SETTLE_TIMEOUT * 2 ))
+  while (( ${#pending} && tries-- > 0 )); do
+    for d in $pending; do is_active $d && pending=(${pending:#$d}); done
+    (( ${#pending} )) && sleep 0.5
+  done
+  (( ${#pending} == 0 )) || print -u2 "deskflip: still waiting for: $pending (continuing)"
+}
 set_input()  {
   local code=${INPUTS[$2]:-}
   [[ -n $code ]] || die "unknown input '$2' (not in INPUTS)."
@@ -70,7 +83,7 @@ apply_preset() {
   local name=$1 spec=${PRESETS[$1]:-}
   [[ -n $spec ]] || die "unknown preset '$name'. Try 'deskflip presets'."
 
-  local -a to_connect to_switch to_release
+  local -a to_connect to_switch to_release to_keep
   local entry disp target
   for entry in ${(z)spec}; do
     disp=${entry%%:*} target=${entry#*:}
@@ -84,7 +97,7 @@ apply_preset() {
       to_connect+=($disp)
       to_switch+=("$disp:$target")
       # Handed to another computer: disconnect after switching.
-      is_mac_input $target || to_release+=($disp)
+      if is_mac_input $target; then to_keep+=($disp); else to_release+=($disp); fi
     fi
   done
 
@@ -98,6 +111,9 @@ apply_preset() {
     set_input ${entry%%:*} ${entry#*:} || { print -u2 "deskflip: could not switch input of '${entry%%:*}'"; failed=1 }
   done
   (( ${#to_switch} )) && sleep $SWITCH_DELAY
+
+  # Make sure the displays the Mac keeps are back before disconnecting others.
+  (( ${#to_release} && ${#to_keep} )) && wait_active $to_keep
 
   for d in $to_release; do
     disconnect $d || { print -u2 "deskflip: could not disconnect '$d'"; failed=1 }
@@ -130,10 +146,14 @@ cmd_ids() {
 
 cmd_input() {
   load_config
-  local d
+  local d code
   for d in ${(ko)DISPLAYS}; do
-    printf '%-10s ' "$d:"
-    "$DDC_TOOL" display "$(ddc_id $d)" get input || print "(no reply)"
+    code=$("$DDC_TOOL" display "$(ddc_id $d)" get input 2>/dev/null) || code=
+    if [[ -z $code || $code == 0 ]]; then
+      printf '%-10s %s\n' "$d:" "no reply (set to another input or disconnected?)"
+    else
+      printf '%-10s %s\n' "$d:" "$code"
+    fi
   done
 }
 

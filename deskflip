@@ -1,0 +1,183 @@
+#!/bin/zsh
+# deskflip — switch monitor inputs (DDC) and connect/disconnect displays on macOS
+# with one command, so monitors can be shared between a Mac and another computer.
+#
+# Usage: deskflip <preset>      apply a preset from your config
+#        deskflip presets       list presets
+#        deskflip ids           show displays, UUIDs and DDC identifiers
+#        deskflip input         show the current input code of each display
+#        deskflip init          create a config file from the example
+#        deskflip help
+
+emulate zsh
+setopt no_unset pipe_fail
+
+VERSION=0.1.0
+SELF_DIR=${0:A:h}
+CONFIG=${DESKFLIP_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/deskflip/config}
+
+die()  { print -u2 "deskflip: $*"; exit 1 }
+info() { [[ -n ${DESKFLIP_QUIET:-} ]] || print "$*" }
+
+# --- Locate helper tools --------------------------------------------------
+
+find_display_tool() {
+  local c
+  for c in "$SELF_DIR/deskflip-display" "${commands[deskflip-display]:-}"; do
+    [[ -n $c && -x $c ]] && { print -r -- $c; return 0 }
+  done
+  die "deskflip-display not found. Run 'make install' or build it with 'make'."
+}
+
+find_ddc_tool() {
+  [[ -n ${commands[m1ddc]:-} ]] && { print -r -- ${commands[m1ddc]}; return 0 }
+  [[ -x /opt/homebrew/bin/m1ddc ]] && { print -r -- /opt/homebrew/bin/m1ddc; return 0 }
+  die "m1ddc not found. Install it with 'brew install m1ddc'."
+}
+
+# --- Config ---------------------------------------------------------------
+
+typeset -gA DISPLAYS DDC_IDS INPUTS PRESETS
+typeset -ga MAC_INPUTS
+typeset -g CONNECT_DELAY=2 SWITCH_DELAY=1
+
+load_config() {
+  [[ -r $CONFIG ]] || die "no config at $CONFIG. Run 'deskflip init' first."
+  source "$CONFIG"
+  (( ${#DISPLAYS} )) || die "no DISPLAYS defined in $CONFIG."
+  (( ${#PRESETS} ))  || die "no PRESETS defined in $CONFIG."
+}
+
+ddc_id() { print -r -- ${DDC_IDS[$1]:-${DISPLAYS[$1]}} }
+
+is_mac_input() { (( ${MAC_INPUTS[(Ie)$1]} )) }
+
+# --- Actions --------------------------------------------------------------
+
+connect()    { "$DISPLAY_TOOL" on  "${DISPLAYS[$1]}" >/dev/null }
+disconnect() { "$DISPLAY_TOOL" off "${DISPLAYS[$1]}" >/dev/null }
+set_input()  {
+  local code=${INPUTS[$2]:-}
+  [[ -n $code ]] || die "unknown input '$2' (not in INPUTS)."
+  "$DDC_TOOL" display "$(ddc_id $1)" set input "$code" >/dev/null
+}
+
+# Apply a preset. Order matters:
+#   1. connect every display the Mac should keep (DDC may need it connected)
+#   2. switch inputs
+#   3. disconnect displays that are off or handed to another computer
+apply_preset() {
+  local name=$1 spec=${PRESETS[$1]:-}
+  [[ -n $spec ]] || die "unknown preset '$name'. Try 'deskflip presets'."
+
+  local -a to_connect to_switch to_release
+  local entry disp target
+  for entry in ${(z)spec}; do
+    disp=${entry%%:*} target=${entry#*:}
+    [[ $entry == *:* && -n $disp && -n $target ]] || die "bad entry '$entry' in preset '$name'."
+    [[ -n ${DISPLAYS[$disp]:-} ]] || die "unknown display '$disp' in preset '$name'."
+    if [[ $target == off ]]; then
+      # Turned off: just disconnect it from the Mac.
+      to_release+=($disp)
+    else
+      [[ -n ${INPUTS[$target]:-} ]] || die "unknown input '$target' in preset '$name'."
+      to_connect+=($disp)
+      to_switch+=("$disp:$target")
+      # Handed to another computer: disconnect after switching.
+      is_mac_input $target || to_release+=($disp)
+    fi
+  done
+
+  local d failed=0
+  for d in $to_connect; do
+    connect $d || { print -u2 "deskflip: could not connect '$d'"; failed=1 }
+  done
+  (( ${#to_connect} )) && sleep $CONNECT_DELAY
+
+  for entry in $to_switch; do
+    set_input ${entry%%:*} ${entry#*:} || { print -u2 "deskflip: could not switch input of '${entry%%:*}'"; failed=1 }
+  done
+  (( ${#to_switch} )) && sleep $SWITCH_DELAY
+
+  for d in $to_release; do
+    disconnect $d || { print -u2 "deskflip: could not disconnect '$d'"; failed=1 }
+  done
+
+  (( failed )) && die "preset '$name' applied with errors."
+  info "deskflip: applied preset '$name'."
+}
+
+# --- Commands -------------------------------------------------------------
+
+cmd_init() {
+  local example
+  for example in "$SELF_DIR/config.example" "$SELF_DIR/../share/deskflip/config.example"; do
+    [[ -r $example ]] && break
+  done
+  [[ -r $example ]] || die "config.example not found."
+  [[ -e $CONFIG ]] && die "$CONFIG already exists."
+  mkdir -p "${CONFIG:h}"
+  cp "$example" "$CONFIG"
+  print "Created $CONFIG. Run 'deskflip ids' and fill in your display UUIDs."
+}
+
+cmd_ids() {
+  print "Displays (fill these UUIDs into DISPLAYS):"
+  "$DISPLAY_TOOL" list
+  print "\nDDC displays (use these in DDC_IDS only if the UUID does not work with m1ddc):"
+  "$DDC_TOOL" display list
+}
+
+cmd_input() {
+  load_config
+  local d
+  for d in ${(ko)DISPLAYS}; do
+    printf '%-10s ' "$d:"
+    "$DDC_TOOL" display "$(ddc_id $d)" get input || print "(no reply)"
+  done
+}
+
+cmd_presets() {
+  load_config
+  local p
+  for p in ${(ko)PRESETS}; do
+    printf '%-10s %s\n' "$p" "${PRESETS[$p]}"
+  done
+}
+
+usage() {
+  cat <<EOF
+deskflip $VERSION — switch monitor inputs and connect/disconnect displays on macOS
+
+Usage:
+  deskflip <preset>    apply a preset from your config
+  deskflip presets     list presets
+  deskflip ids         show displays, UUIDs and DDC identifiers
+  deskflip input       show the current input code of each display
+  deskflip init        create a config file from the example
+  deskflip help        show this help
+
+Config: $CONFIG
+EOF
+}
+
+# --- Main -----------------------------------------------------------------
+
+(( $# )) || { usage; exit 1 }
+
+case $1 in
+  help|-h|--help) usage ;;
+  version|--version) print "deskflip $VERSION" ;;
+  init) cmd_init ;;
+  ids)
+    DISPLAY_TOOL=$(find_display_tool); DDC_TOOL=$(find_ddc_tool)
+    cmd_ids ;;
+  input)
+    DDC_TOOL=$(find_ddc_tool)
+    cmd_input ;;
+  presets) cmd_presets ;;
+  *)
+    DISPLAY_TOOL=$(find_display_tool); DDC_TOOL=$(find_ddc_tool)
+    load_config
+    apply_preset $1 ;;
+esac
